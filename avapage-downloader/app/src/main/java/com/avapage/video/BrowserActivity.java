@@ -49,7 +49,7 @@ public class BrowserActivity extends Activity {
             if(m.startsWith("video/") || m.startsWith("audio/") || m.contains("mpegurl") || m.contains("dash+xml")) addCandidate(u,null); else observe(u,null);
         });
         go.setOnClickListener(v -> open(address.getText().toString().trim()));
-        media.setOnClickListener(v -> showMedia());
+        media.setOnClickListener(v -> scanPage());
         String initial=getIntent().getStringExtra("url"); if(initial!=null) open(initial);
     }
     private void open(String value) {
@@ -69,6 +69,17 @@ public class BrowserActivity extends Activity {
         if(uri==null || uri.getScheme()==null || !(uri.getScheme().equalsIgnoreCase("https") || uri.getScheme().equalsIgnoreCase("http"))) return;
         int count; synchronized(links) { links.add(uri.toString()); if(referer!=null && !referer.isEmpty()) referers.put(uri.toString(),referer); count=links.size(); }
         runOnUiThread(() -> media.setText("Media terdeteksi: "+count));
+    }
+    private void scanPage() {
+        String js="(function(){let a=[];function add(u){if(typeof u==='string'&&/^https?:/i.test(u))a.push(u)};"
+            +"document.querySelectorAll('video,video source,audio,audio source').forEach(e=>{add(e.currentSrc);add(e.src)});"
+            +"try{if(typeof window.jwplayer==='function'){let p=window.jwplayer().getPlaylistItem();if(p){add(p.file);(p.sources||[]).forEach(s=>add(s.file))}}}catch(e){};"
+            +"return JSON.stringify([...new Set(a)]);})()";
+        web.evaluateJavascript(js, result -> {
+            try { Object raw=new org.json.JSONTokener(result).nextValue(); if(raw instanceof String) { org.json.JSONArray a=new org.json.JSONArray((String)raw); for(int i=0;i<a.length();i++) addCandidate(Uri.parse(a.optString(i)),web.getUrl()); } }
+            catch(Exception ignored) { }
+            showMedia();
+        });
     }
     private void showMedia() {
         ArrayList<String> results; synchronized(links) { results=new ArrayList<>(links); }
