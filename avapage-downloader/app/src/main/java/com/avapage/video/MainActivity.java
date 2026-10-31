@@ -47,6 +47,14 @@ public class MainActivity extends Activity {
             try {
                 YoutubeDL.getInstance().init(getApplicationContext());
                 FFmpeg.getInstance().init(getApplicationContext());
+                android.content.SharedPreferences settings=getSharedPreferences("engine",MODE_PRIVATE);
+                long now=System.currentTimeMillis();
+                if(now-settings.getLong("last_check",0L)>24L*60*60*1000) {
+                    settings.edit().putLong("last_check",now).apply();
+                    show("Memeriksa pembaruan mesin yt-dlp...");
+                    try { YoutubeDL.getInstance().updateYoutubeDL(getApplicationContext(), settings.getBoolean("nightly",false) ? YoutubeDL.UpdateChannel._NIGHTLY : YoutubeDL.UpdateChannel._STABLE); }
+                    catch(Exception ignored) { }
+                }
                 ready = true;
                 show("Siap. Tempel tautan video untuk mulai.");
             } catch (Exception e) { show("Gagal menyiapkan mesin: " + message(e)); }
@@ -99,6 +107,7 @@ public class MainActivity extends Activity {
     }
     private void updateEngine(YoutubeDL.UpdateChannel channel) {
         if (!ready) return;
+        getSharedPreferences("engine",MODE_PRIVATE).edit().putBoolean("nightly",channel==YoutubeDL.UpdateChannel._NIGHTLY).apply();
         setBusy(true); show("Memeriksa pembaruan...");
         worker.execute(() -> { try { Object result=YoutubeDL.getInstance().updateYoutubeDL(getApplicationContext(), channel); show("Pembaruan selesai: " + result + "."); } catch(Exception e) { show("Update gagal: " + message(e)); } finally { runOnUiThread(() -> setBusy(false)); } });
     }
@@ -117,7 +126,7 @@ public class MainActivity extends Activity {
             int seconds=info.getDuration(); String duration=seconds>0 ? String.format(java.util.Locale.ROOT,"%d:%02d",seconds/60,seconds%60) : "Durasi tidak tersedia";
             String uploader=info.getUploader()==null ? "" : "\n"+info.getUploader();
             runOnUiThread(() -> preview.setText(name+uploader+"\n"+duration)); show("Info video siap. Pilih format dan mulai download.");
-        } catch(Exception e) { show("Info belum tersedia: " + message(e) + "\nLo tetap bisa mencoba download langsung."); } finally { runOnUiThread(() -> setBusy(false)); } });
+        } catch(Exception e) { show(message(e).contains("Unsupported URL") ? "Situs ini belum dikenali mesin. Tekan Buka browser video, putar videonya, lalu tekan Media terdeteksi." : "Info belum tersedia: " + message(e) + "\nLo tetap bisa mencoba download langsung."); } finally { runOnUiThread(() -> setBusy(false)); } });
     }
     private void download() {
         String url=validUrl(); if(url==null) return;
@@ -156,7 +165,7 @@ public class MainActivity extends Activity {
                 for(File file:files) saveToDownloads(file);
                 show("Selesai! File disimpan di Downloads/Klip.");
                 runOnUiThread(() -> progress.setProgress(100));
-            } catch(Exception e) { show(cancelRequested ? "Unduhan dibatalkan." : "Unduhan gagal: " + message(e) + "\nCoba update mesin atau gunakan tautan lain."); }
+            } catch(Exception e) { show(cancelRequested ? "Unduhan dibatalkan." : message(e).contains("Unsupported URL") ? "Situs ini belum dikenali mesin. Tekan Buka browser video, putar videonya, lalu tekan Media terdeteksi." : "Unduhan gagal: " + message(e) + "\nCoba update mesin atau gunakan tautan lain."); }
             finally { File[] files=dir.listFiles(); if(files!=null) for(File f:files) f.delete(); dir.delete(); downloading=false; runOnUiThread(() -> setBusy(false)); }
         });
     }
