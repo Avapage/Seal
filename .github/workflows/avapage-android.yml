@@ -3,6 +3,8 @@ on:
   push:
     branches: [avapage-downloader]
     paths: ['avapage-downloader/**', '.github/workflows/avapage-android.yml']
+  pull_request:
+    paths: ['avapage-downloader/**', '.github/workflows/avapage-android.yml']
   workflow_dispatch:
 permissions:
   contents: read
