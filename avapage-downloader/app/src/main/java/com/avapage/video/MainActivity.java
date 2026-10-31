@@ -71,9 +71,9 @@ public class MainActivity extends Activity {
         int white = Color.rgb(240,243,255), muted = Color.rgb(165,177,199);
         ScrollView scroll = new ScrollView(this); scroll.setFillViewport(true); scroll.setBackgroundColor(Color.rgb(13,17,31));
         LinearLayout root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setPadding(dp(22),dp(28),dp(22),dp(36)); scroll.addView(root); setContentView(scroll);
-        TextView badge = text("AVAPAGE  /  MEDIA TOOLKIT", 12, Color.rgb(125,231,204)); badge.setLetterSpacing(.12f); root.addView(badge);
+        TextView badge = text("KLIP  /  MEDIA TOOLKIT", 12, Color.rgb(125,231,204)); badge.setLetterSpacing(.12f); root.addView(badge);
         TextView title = text("Simpan yang\npenting.", 36, white); title.setTypeface(Typeface.DEFAULT,Typeface.BOLD); title.setPadding(0,dp(16),0,dp(12)); root.addView(title);
-        TextView intro = text("AvaDownload mengambil video dan audio langsung ke perangkatmu.", 16, muted); intro.setPadding(0,0,0,dp(28)); root.addView(intro);
+        TextView intro = text("Klip mengambil video dan audio langsung ke perangkatmu.", 16, muted); intro.setPadding(0,0,0,dp(28)); root.addView(intro);
         TextView label = text("TAUTAN VIDEO", 12, muted); root.addView(label);
         link = new EditText(this); link.setSingleLine(false); link.setMinLines(2); link.setTextColor(white); link.setHintTextColor(muted); link.setHint("Tempel tautan di sini..."); link.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI); link.setBackground(rounded(Color.rgb(30,39,57),14)); link.setPadding(dp(16),dp(12),dp(16),dp(12)); root.addView(link);
         LinearLayout row = new LinearLayout(this); row.setGravity(Gravity.END); root.addView(row);
@@ -88,7 +88,7 @@ public class MainActivity extends Activity {
         progress = new ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal); progress.setMax(100); root.addView(progress);
         status = text("Menyiapkan aplikasi...", 14, muted); status.setTextIsSelectable(true); status.setPadding(0,16,0,0); root.addView(status);
         update = new Button(this); update.setText("Pembaruan mesin"); root.addView(update); update.setOnClickListener(v -> chooseUpdate());
-        TextView note = text("Hasil disimpan di Downloads / AvaDownload. Biarkan aplikasi terbuka selama unduhan.", 13, muted); note.setPadding(0,dp(24),0,0); root.addView(note);
+        TextView note = text("Hasil disimpan di Downloads / Klip. Biarkan aplikasi terbuka selama unduhan.", 13, muted); note.setPadding(0,dp(24),0,0); root.addView(note);
     }
     private void setBusy(boolean busy) { start.setEnabled(!busy && ready); update.setEnabled(!busy && ready); inspect.setEnabled(!busy && ready); cancel.setVisibility(downloading ? View.VISIBLE : View.GONE); cancel.setEnabled(downloading && !cancelRequested); }
     private void show(String s) { runOnUiThread(() -> status.setText(s)); }
@@ -154,7 +154,7 @@ public class MainActivity extends Activity {
                 File[] files=dir.listFiles(f -> f.isFile() && !f.getName().equals(".cookies.txt") && !f.getName().endsWith(".part") && !f.getName().endsWith(".ytdl"));
                 if(files==null || files.length==0) throw new IOException("Tidak ada file yang dihasilkan");
                 for(File file:files) saveToDownloads(file);
-                show("Selesai! File disimpan di Downloads/AvaDownload.");
+                show("Selesai! File disimpan di Downloads/Klip.");
                 runOnUiThread(() -> progress.setProgress(100));
             } catch(Exception e) { show(cancelRequested ? "Unduhan dibatalkan." : "Unduhan gagal: " + message(e) + "\nCoba update mesin atau gunakan tautan lain."); }
             finally { File[] files=dir.listFiles(); if(files!=null) for(File f:files) f.delete(); dir.delete(); downloading=false; runOnUiThread(() -> setBusy(false)); }
@@ -166,7 +166,7 @@ public class MainActivity extends Activity {
         String ext=android.webkit.MimeTypeMap.getFileExtensionFromUrl(file.getName());
         String mime=android.webkit.MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext.toLowerCase(java.util.Locale.ROOT));
         values.put(MediaStore.Downloads.MIME_TYPE,mime==null?"application/octet-stream":mime);
-        values.put(MediaStore.Downloads.RELATIVE_PATH,Environment.DIRECTORY_DOWNLOADS+"/AvaDownload");
+        values.put(MediaStore.Downloads.RELATIVE_PATH,Environment.DIRECTORY_DOWNLOADS+"/Klip");
         values.put(MediaStore.Downloads.IS_PENDING,1);
         Uri uri=getContentResolver().insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI,values);
         if(uri==null) throw new IOException("Tidak bisa membuat file di Downloads");
