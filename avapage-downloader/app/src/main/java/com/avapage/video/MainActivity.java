@@ -33,6 +33,7 @@ public class MainActivity extends Activity {
     private volatile boolean ready = false;
     private volatile boolean downloading = false;
     private volatile boolean cancelRequested = false;
+    private String browserUrl, browserReferer, browserUserAgent, browserCookies;
     private final String processId = "avapage-download";
 
     @Override public void onCreate(Bundle state) {
@@ -54,7 +55,7 @@ public class MainActivity extends Activity {
     }
     @Override protected void onNewIntent(Intent intent) { super.onNewIntent(intent); setIntent(intent); acceptIntent(intent); }
     private void acceptIntent(Intent intent) {
-        if (intent != null && intent.hasExtra("media_url")) { link.setText(intent.getStringExtra("media_url")); return; }
+        if (intent != null && intent.hasExtra("media_url")) { browserUrl=intent.getStringExtra("media_url"); browserReferer=intent.getStringExtra("media_referer"); browserUserAgent=intent.getStringExtra("media_user_agent"); browserCookies=intent.getStringExtra("media_cookies"); link.setText(browserUrl); return; }
         if (intent != null && Intent.ACTION_SEND.equals(intent.getAction())) {
             String text = intent.getStringExtra(Intent.EXTRA_TEXT);
             if (text != null) {
@@ -121,6 +122,9 @@ public class MainActivity extends Activity {
     private void download() {
         String url=validUrl(); if(url==null) return;
         final int selected=format.getSelectedItemPosition();
+        final String contextReferer=url.equals(browserUrl)?browserReferer:null;
+        final String contextAgent=url.equals(browserUrl)?browserUserAgent:null;
+        final String contextCookies=url.equals(browserUrl)?browserCookies:null;
         downloading=true; cancelRequested=false;
         setBusy(true); progress.setProgress(0); show("Menyiapkan unduhan...");
         worker.execute(() -> {
@@ -129,6 +133,16 @@ public class MainActivity extends Activity {
                 if(!dir.mkdirs()) throw new IOException("Tidak bisa menyiapkan penyimpanan sementara");
                 YoutubeDLRequest request = new YoutubeDLRequest(url);
                 request.addOption("--no-playlist"); request.addOption("--no-mtime");
+                if(contextReferer!=null && !contextReferer.isEmpty()) request.addOption("--referer",contextReferer);
+                if(contextAgent!=null && !contextAgent.isEmpty()) request.addOption("--user-agent",contextAgent);
+                if(contextCookies!=null && !contextCookies.isEmpty()) {
+                    String host=Uri.parse(url).getHost(); File cookieFile=new File(dir,".cookies.txt");
+                    try (java.io.PrintWriter pw=new java.io.PrintWriter(new java.io.OutputStreamWriter(new java.io.FileOutputStream(cookieFile),java.nio.charset.StandardCharsets.UTF_8))) {
+                        pw.println("# Netscape HTTP Cookie File");
+                        for(String cookie:contextCookies.split(";")) { int split=cookie.indexOf('='); if(split<=0) continue; String name=cookie.substring(0,split).trim(); String value=cookie.substring(split+1).trim(); if(name.contains("\t") || name.contains("\n") || value.contains("\t") || value.contains("\n")) continue; pw.println(host+"\tFALSE\t/\t"+(url.startsWith("https:")?"TRUE":"FALSE")+"\t0\t"+name+"\t"+value); }
+                    }
+                    request.addOption("--cookies",cookieFile.getAbsolutePath());
+                }
                 request.addOption("-o", new File(dir, "%(title).120B [%(id)s].%(ext)s").getAbsolutePath());
                 if(selected==4) { request.addOption("-x"); request.addOption("--audio-format", "mp3"); }
                 else if(selected==5) request.addOption("-f", "bestaudio/best");
@@ -137,7 +151,7 @@ public class MainActivity extends Activity {
                 if(cancelRequested) throw new IOException("Dibatalkan");
                 YoutubeDL.getInstance().execute(request, processId, (p, eta, line) -> { if(cancelRequested) new Thread(() -> YoutubeDL.getInstance().destroyProcessById(processId)).start(); runOnUiThread(() -> { progress.setProgress(Math.max(0,Math.min(100,(int)(float)p))); status.setText(cancelRequested ? "Membatalkan unduhan..." : line); }); return Unit.INSTANCE; });
                 if(cancelRequested) throw new IOException("Dibatalkan");
-                File[] files=dir.listFiles(f -> f.isFile() && !f.getName().endsWith(".part") && !f.getName().endsWith(".ytdl"));
+                File[] files=dir.listFiles(f -> f.isFile() && !f.getName().equals(".cookies.txt") && !f.getName().endsWith(".part") && !f.getName().endsWith(".ytdl"));
                 if(files==null || files.length==0) throw new IOException("Tidak ada file yang dihasilkan");
                 for(File file:files) saveToDownloads(file);
                 show("Selesai! File disimpan di Downloads/AvaDownload.");
