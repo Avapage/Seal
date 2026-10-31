@@ -1,0 +1,10 @@
+# AvaDownload
+
+Prototipe aplikasi pengunduh video Android 10+ yang berjalan di perangkat. Menggunakan yt-dlp dan FFmpeg melalui youtubedl-android. Proyek ini belum diverifikasi pada seluruh versi Android atau seluruh situs. Unduh hanya konten yang boleh Anda unduh.
+
+## Membuat APK
+Di GitHub buka tab Actions, pilih **Build AvaDownload APK**, lalu pilih build pada branch `avapage-downloader`. Jika selesai, unduh artifact **AvaDownload-debug**, ekstrak ZIP, dan instal `app-debug.apk`. GitHub mungkin meminta login untuk mengunduh artifact. Debug APK hanya untuk penggunaan pribadi dan belum ditandatangani dengan kunci rilis.
+
+Dengan Android Studio dan SDK 35, buka folder ini dan jalankan `gradle :app:assembleDebug` (Gradle 8.10.2 dan JDK 17). Gunakan tombol Update untuk memperbarui yt-dlp. Simpan aplikasi terbuka selama mengunduh. File berada di Downloads/AvaDownload.
+
+Menggunakan [youtubedl-android](https://github.com/yausername/youtubedl-android), [yt-dlp](https://github.com/yt-dlp/yt-dlp), dan FFmpeg. Komponen tunduk pada lisensi masing-masing. Tidak ada jaminan semua situs, video yang memerlukan login, atau konten DRM didukung.
