@@ -11,10 +11,14 @@ import android.provider.MediaStore;
 import android.text.InputType;
 import android.view.Gravity;
 import android.view.View;
+import android.graphics.Typeface;
+import android.graphics.drawable.GradientDrawable;
+import android.app.AlertDialog;
 import android.widget.*;
 import com.yausername.ffmpeg.FFmpeg;
 import com.yausername.youtubedl_android.YoutubeDL;
 import com.yausername.youtubedl_android.YoutubeDLRequest;
+import com.yausername.youtubedl_android.mapper.VideoInfo;
 import java.io.*;
 import java.util.concurrent.Executors;
 import kotlin.Unit;
@@ -22,11 +26,13 @@ import kotlin.Unit;
 public class MainActivity extends Activity {
     private final java.util.concurrent.ExecutorService worker = Executors.newSingleThreadExecutor();
     private EditText link;
-    private TextView status;
+    private TextView status, preview;
     private ProgressBar progress;
     private Spinner format;
-    private Button start, update;
+    private Button start, update, inspect, cancel;
     private volatile boolean ready = false;
+    private volatile boolean downloading = false;
+    private volatile boolean cancelRequested = false;
     private final String processId = "avapage-download";
 
     @Override public void onCreate(Bundle state) {
@@ -57,38 +63,63 @@ public class MainActivity extends Activity {
         }
     }
     private TextView text(String s, int size, int color) { TextView t = new TextView(this); t.setText(s); t.setTextSize(size); t.setTextColor(color); return t; }
+    private int dp(float n) { return (int)(n * getResources().getDisplayMetrics().density + .5f); }
+    private GradientDrawable rounded(int color, int radius) { GradientDrawable d=new GradientDrawable(); d.setColor(color); d.setCornerRadius(dp(radius)); return d; }
     private void buildUi() {
         int white = Color.rgb(240,243,255), muted = Color.rgb(165,177,199);
         ScrollView scroll = new ScrollView(this); scroll.setFillViewport(true); scroll.setBackgroundColor(Color.rgb(13,17,31));
-        LinearLayout root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setPadding(32,56,32,36); scroll.addView(root); setContentView(scroll);
-        TextView badge = text("AVA  /  VIDEO TOOL", 12, Color.rgb(125,231,204)); root.addView(badge);
-        TextView title = text("AvaDownload", 32, white); title.setPadding(0,22,0,8); root.addView(title);
-        TextView intro = text("Simpan video dan audio langsung ke perangkat.", 16, muted); intro.setPadding(0,0,0,32); root.addView(intro);
+        LinearLayout root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setPadding(dp(22),dp(28),dp(22),dp(36)); scroll.addView(root); setContentView(scroll);
+        TextView badge = text("AVAPAGE  /  MEDIA TOOLKIT", 12, Color.rgb(125,231,204)); badge.setLetterSpacing(.12f); root.addView(badge);
+        TextView title = text("Simpan yang\npenting.", 36, white); title.setTypeface(Typeface.DEFAULT,Typeface.BOLD); title.setPadding(0,dp(16),0,dp(12)); root.addView(title);
+        TextView intro = text("AvaDownload mengambil video dan audio langsung ke perangkatmu.", 16, muted); intro.setPadding(0,0,0,dp(28)); root.addView(intro);
         TextView label = text("TAUTAN VIDEO", 12, muted); root.addView(label);
-        link = new EditText(this); link.setSingleLine(false); link.setMinLines(2); link.setTextColor(white); link.setHintTextColor(muted); link.setHint("https://..."); link.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI); root.addView(link);
+        link = new EditText(this); link.setSingleLine(false); link.setMinLines(2); link.setTextColor(white); link.setHintTextColor(muted); link.setHint("Tempel tautan di sini..."); link.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI); link.setBackground(rounded(Color.rgb(30,39,57),14)); link.setPadding(dp(16),dp(12),dp(16),dp(12)); root.addView(link);
         LinearLayout row = new LinearLayout(this); row.setGravity(Gravity.END); root.addView(row);
         Button paste = new Button(this); paste.setText("Tempel"); row.addView(paste); paste.setOnClickListener(v -> { android.content.ClipboardManager cb=(android.content.ClipboardManager)getSystemService(CLIPBOARD_SERVICE); if(cb.hasPrimaryClip() && cb.getPrimaryClip()!=null) link.setText(cb.getPrimaryClip().getItemAt(0).coerceToText(this)); });
+        inspect = new Button(this); inspect.setText("Cek info video"); row.addView(inspect); inspect.setOnClickListener(v -> inspectVideo());
+        preview = text("Info video akan muncul di sini setelah diperiksa.", 14, muted); preview.setPadding(dp(16),dp(14),dp(16),dp(14)); preview.setBackground(rounded(Color.rgb(25,34,49),14)); root.addView(preview);
         TextView fLabel = text("FORMAT", 12, muted); fLabel.setPadding(0,20,0,4); root.addView(fLabel);
-        format = new Spinner(this); String[] formats={"Video terbaik", "Video maksimal 1080p", "Audio MP3"}; ArrayAdapter<String> adapter=new ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,formats); format.setAdapter(adapter); root.addView(format);
-        start = new Button(this); start.setText("Download"); root.addView(start); start.setOnClickListener(v -> download());
-        update = new Button(this); update.setText("Update mesin pengunduh"); root.addView(update); update.setOnClickListener(v -> updateEngine());
+        format = new Spinner(this); String[] formats={"Video · kualitas terbaik", "Video · maksimal 1080p", "Video · maksimal 720p", "Video · maksimal 480p", "Audio · MP3", "Audio · format asli"}; ArrayAdapter<String> adapter=new ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,formats); format.setAdapter(adapter); root.addView(format);
+        start = new Button(this); start.setText("Mulai download"); root.addView(start); start.setOnClickListener(v -> download());
+        cancel = new Button(this); cancel.setText("Batalkan unduhan"); cancel.setVisibility(View.GONE); root.addView(cancel); cancel.setOnClickListener(v -> { cancelRequested=true; cancel.setEnabled(false); show("Membatalkan unduhan..."); new Thread(() -> YoutubeDL.getInstance().destroyProcessById(processId)).start(); });
         progress = new ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal); progress.setMax(100); root.addView(progress);
         status = text("Menyiapkan aplikasi...", 14, muted); status.setTextIsSelectable(true); status.setPadding(0,16,0,0); root.addView(status);
-        TextView note = text("Hasil: Downloads / AvaDownload\nBiarkan aplikasi terbuka selama unduhan. Dukungan situs bergantung pada yt-dlp.", 13, muted); note.setPadding(0,36,0,0); root.addView(note);
+        update = new Button(this); update.setText("Pembaruan mesin"); root.addView(update); update.setOnClickListener(v -> chooseUpdate());
+        TextView note = text("Hasil disimpan di Downloads / AvaDownload. Biarkan aplikasi terbuka selama unduhan.", 13, muted); note.setPadding(0,dp(24),0,0); root.addView(note);
     }
-    private void setBusy(boolean busy) { start.setEnabled(!busy && ready); update.setEnabled(!busy && ready); }
+    private void setBusy(boolean busy) { start.setEnabled(!busy && ready); update.setEnabled(!busy && ready); inspect.setEnabled(!busy && ready); cancel.setVisibility(downloading ? View.VISIBLE : View.GONE); cancel.setEnabled(downloading && !cancelRequested); }
     private void show(String s) { runOnUiThread(() -> status.setText(s)); }
     private String message(Exception e) { return e.getMessage()==null ? e.getClass().getSimpleName() : e.getMessage(); }
-    private void updateEngine() {
+    private void chooseUpdate() {
+        new AlertDialog.Builder(this).setTitle("Pembaruan mesin")
+            .setItems(new String[]{"Stable · direkomendasikan", "Nightly · perbaikan terbaru"}, (d, which) -> updateEngine(which==0 ? YoutubeDL.UpdateChannel._STABLE : YoutubeDL.UpdateChannel._NIGHTLY)).show();
+    }
+    private void updateEngine(YoutubeDL.UpdateChannel channel) {
         if (!ready) return;
         setBusy(true); show("Memeriksa pembaruan...");
-        worker.execute(() -> { try { Object result=YoutubeDL.getInstance().updateYoutubeDL(getApplicationContext(), YoutubeDL.UpdateChannel._STABLE); show("Pembaruan: " + result); } catch(Exception e) { show("Update gagal: " + message(e)); } finally { runOnUiThread(() -> setBusy(false)); } });
+        worker.execute(() -> { try { Object result=YoutubeDL.getInstance().updateYoutubeDL(getApplicationContext(), channel); show("Pembaruan selesai: " + result + "."); } catch(Exception e) { show("Update gagal: " + message(e)); } finally { runOnUiThread(() -> setBusy(false)); } });
+    }
+    private String validUrl() {
+        String url=link.getText().toString().trim(); Uri parsed=Uri.parse(url);
+        if (!("https".equalsIgnoreCase(parsed.getScheme()) || "http".equalsIgnoreCase(parsed.getScheme())) || parsed.getHost()==null) { link.setError("Masukkan tautan http atau https yang valid"); return null; }
+        return url;
+    }
+    private void inspectVideo() {
+        String url=validUrl(); if(url==null) return;
+        setBusy(true); show("Membaca informasi video...");
+        worker.execute(() -> { try {
+            YoutubeDLRequest request=new YoutubeDLRequest(url); request.addOption("--no-playlist");
+            VideoInfo info=YoutubeDL.getInstance().getInfo(request);
+            String name=info.getTitle()==null ? "Video" : info.getTitle();
+            int seconds=info.getDuration(); String duration=seconds>0 ? String.format(java.util.Locale.ROOT,"%d:%02d",seconds/60,seconds%60) : "Durasi tidak tersedia";
+            String uploader=info.getUploader()==null ? "" : "\n"+info.getUploader();
+            runOnUiThread(() -> preview.setText(name+uploader+"\n"+duration)); show("Info video siap. Pilih format dan mulai download.");
+        } catch(Exception e) { show("Info belum tersedia: " + message(e) + "\nLo tetap bisa mencoba download langsung."); } finally { runOnUiThread(() -> setBusy(false)); } });
     }
     private void download() {
-        String url=link.getText().toString().trim();
-        Uri parsed=Uri.parse(url);
-        if (!("https".equalsIgnoreCase(parsed.getScheme()) || "http".equalsIgnoreCase(parsed.getScheme())) || parsed.getHost()==null) { link.setError("Masukkan tautan http atau https yang valid"); return; }
+        String url=validUrl(); if(url==null) return;
         final int selected=format.getSelectedItemPosition();
+        downloading=true; cancelRequested=false;
         setBusy(true); progress.setProgress(0); show("Menyiapkan unduhan...");
         worker.execute(() -> {
             File dir=new File(getCacheDir(), "job-"+System.currentTimeMillis());
@@ -97,17 +128,20 @@ public class MainActivity extends Activity {
                 YoutubeDLRequest request = new YoutubeDLRequest(url);
                 request.addOption("--no-playlist"); request.addOption("--no-mtime");
                 request.addOption("-o", new File(dir, "%(title).120B [%(id)s].%(ext)s").getAbsolutePath());
-                if(selected==2) { request.addOption("-x"); request.addOption("--audio-format", "mp3"); }
-                else if(selected==1) request.addOption("-f", "bestvideo[height<=1080]+bestaudio/best[height<=1080]/best");
+                if(selected==4) { request.addOption("-x"); request.addOption("--audio-format", "mp3"); }
+                else if(selected==5) request.addOption("-f", "bestaudio/best");
+                else if(selected>=1 && selected<=3) { int height=selected==1?1080:selected==2?720:480; request.addOption("-f", "bestvideo[height<="+height+"]+bestaudio/best[height<="+height+"]/best"); }
                 else request.addOption("-f", "bestvideo+bestaudio/best");
-                YoutubeDL.getInstance().execute(request, processId, (p, eta, line) -> { runOnUiThread(() -> { progress.setProgress(Math.max(0,Math.min(100,(int)(float)p))); status.setText(line); }); return Unit.INSTANCE; });
+                if(cancelRequested) throw new IOException("Dibatalkan");
+                YoutubeDL.getInstance().execute(request, processId, (p, eta, line) -> { if(cancelRequested) new Thread(() -> YoutubeDL.getInstance().destroyProcessById(processId)).start(); runOnUiThread(() -> { progress.setProgress(Math.max(0,Math.min(100,(int)(float)p))); status.setText(cancelRequested ? "Membatalkan unduhan..." : line); }); return Unit.INSTANCE; });
+                if(cancelRequested) throw new IOException("Dibatalkan");
                 File[] files=dir.listFiles(f -> f.isFile() && !f.getName().endsWith(".part") && !f.getName().endsWith(".ytdl"));
                 if(files==null || files.length==0) throw new IOException("Tidak ada file yang dihasilkan");
                 for(File file:files) saveToDownloads(file);
                 show("Selesai! File disimpan di Downloads/AvaDownload.");
                 runOnUiThread(() -> progress.setProgress(100));
-            } catch(Exception e) { show("Unduhan gagal: " + message(e) + "\nCoba update mesin atau gunakan tautan lain."); }
-            finally { File[] files=dir.listFiles(); if(files!=null) for(File f:files) f.delete(); dir.delete(); runOnUiThread(() -> setBusy(false)); }
+            } catch(Exception e) { show(cancelRequested ? "Unduhan dibatalkan." : "Unduhan gagal: " + message(e) + "\nCoba update mesin atau gunakan tautan lain."); }
+            finally { File[] files=dir.listFiles(); if(files!=null) for(File f:files) f.delete(); dir.delete(); downloading=false; runOnUiThread(() -> setBusy(false)); }
         });
     }
     private void saveToDownloads(File file) throws IOException {
